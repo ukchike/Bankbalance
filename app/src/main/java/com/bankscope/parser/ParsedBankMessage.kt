@@ -7,7 +7,7 @@ data class ParsedBankMessage(
     val transactionDirection: String?,
     val transactionAmount: String?,
     val currencyCode: String,
-    val reportedBalance: String,
+    val reportedBalance: String?,
     val balanceType: String,
     val eventAtEpochMillis: Long?,
     val eventDateOnly: Boolean,
