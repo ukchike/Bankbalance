@@ -99,7 +99,7 @@ fun TransactionHistoryScreen(dao: BankAccountDao, accounts: List<BankAccountEnti
     }
     assigning?.let { row -> AlertDialog(onDismissRequest = { assigning = null }, title = { Text("Assign transaction") }, text = { Column { Text("Choose the correct account with matching institution and currency."); accounts.filter { it.institutionName.equals(row.institutionName, true) && it.currencyCode.equals(row.currencyCode, true) }.forEach { account -> TextButton(onClick = { scope.launch { dao.assignTransaction(row.transactionId, account.accountId) }; assigning = null }) { Text("${account.institutionName} ••${account.accountIdentifier.takeLast(4)} (${account.currencyCode})") } } } }, confirmButton = { TextButton(onClick = { assigning = null }) { Text("Close") } }) }
     categorising?.let { row -> CategoryEditorDialog(row.category, row.isInternalTransfer, onDismiss = { categorising = null }, onSave = { category, internal -> scope.launch { dao.updateTransactionCategory(row.transactionId, category.name, internal) }; categorising = null }) }
-    if (editingBudget) BudgetEditorDialog(monthKey, onDismiss = { editingBudget = false }, onSave = { category, currency, amount -> scope.launch { dao.upsertBudget(BudgetEntity(UUID.randomUUID().toString(), category.name, currency, monthKey, amount, System.currentTimeMillis())) }; editingBudget = false }, onDelete = { budget -> scope.launch { dao.deleteBudget(budget.budgetId) } }, budgets = budgets)
+    if (editingBudget) BudgetEditorDialog(monthKey, onDismiss = { editingBudget = false }, onSave = { budgetId, category, currency, amount -> scope.launch { dao.upsertBudget(BudgetEntity(budgetId ?: UUID.randomUUID().toString(), category.name, currency, monthKey, amount, System.currentTimeMillis())) }; editingBudget = false }, onDelete = { budget -> scope.launch { dao.deleteBudget(budget.budgetId) } }, budgets = budgets)
 }
 
 @Composable
@@ -113,20 +113,22 @@ private fun CategoryEditorDialog(current: String, currentInternal: Boolean, onDi
 }
 
 @Composable
-private fun BudgetEditorDialog(monthKey: String, budgets: List<BudgetEntity>, onDismiss: () -> Unit, onSave: (TransactionCategory, String, String) -> Unit, onDelete: (BudgetEntity) -> Unit) {
+private fun BudgetEditorDialog(monthKey: String, budgets: List<BudgetEntity>, onDismiss: () -> Unit, onSave: (String?, TransactionCategory, String, String) -> Unit, onDelete: (BudgetEntity) -> Unit) {
     val expenseCategories = TransactionCategory.values().filter { it !in setOf(TransactionCategory.TRANSFER, TransactionCategory.INCOME) }
+    var editingId by remember { mutableStateOf<String?>(null) }
     var category by remember { mutableStateOf(expenseCategories.first()) }
     var currency by remember { mutableStateOf("NGN") }
     var amount by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Monthly budgets · $monthKey") }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Choose a category, currency and monthly limit. Budgets are not converted between currencies.", style = MaterialTheme.typography.bodySmall)
+        if (editingId != null) Text("Editing existing budget", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
         expenseCategories.forEach { item -> Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { RadioButton(category == item, onClick = { category = item }); Text(item.name.replace("_", " ")) } }
         OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text("Currency code") }, singleLine = true)
         OutlinedTextField(amount, { amount = it; error = null }, label = { Text("Monthly limit") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (budgets.isNotEmpty()) { HorizontalDivider(); Text("Existing budgets", style = MaterialTheme.typography.titleSmall); budgets.forEach { budget -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("${budget.category} · ${budget.currencyCode} ${budget.limitAmount}", style = MaterialTheme.typography.bodySmall); TextButton(onClick = { onDelete(budget) }) { Text("Delete") } } } }
-    } }, confirmButton = { TextButton(onClick = { val parsed = runCatching { BigDecimal(amount.replace(",", "")) }.getOrNull(); when { currency.length != 3 -> error = "Enter a 3-letter currency code."; parsed == null || parsed <= BigDecimal.ZERO -> error = "Enter a valid positive budget."; else -> onSave(category, currency, parsed.toPlainString()) } }) { Text("Save budget") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } })
+        if (budgets.isNotEmpty()) { HorizontalDivider(); Text("Existing budgets", style = MaterialTheme.typography.titleSmall); budgets.forEach { budget -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { TextButton(onClick = { editingId = budget.budgetId; category = runCatching { TransactionCategory.valueOf(budget.category) }.getOrDefault(TransactionCategory.OTHER); currency = budget.currencyCode; amount = budget.limitAmount; error = null }) { Text("Edit · ${budget.category} · ${budget.currencyCode} ${budget.limitAmount}") }; TextButton(onClick = { onDelete(budget); if (editingId == budget.budgetId) { editingId = null; amount = "" } }) { Text("Delete") } } } }
+    } }, confirmButton = { TextButton(onClick = { val parsed = runCatching { BigDecimal(amount.replace(",", "")) }.getOrNull(); when { currency.length != 3 -> error = "Enter a 3-letter currency code."; parsed == null || parsed <= BigDecimal.ZERO -> error = "Enter a valid positive budget."; else -> onSave(editingId, category, currency, parsed.toPlainString()) } }) { Text(if (editingId == null) "Save budget" else "Update budget") } }, dismissButton = { Row { if (editingId != null) TextButton(onClick = { editingId = null; amount = ""; category = expenseCategories.first(); currency = "NGN"; error = null }) { Text("New budget") }; TextButton(onClick = onDismiss) { Text("Close") } } })
 }
 
 private fun money(value: BigDecimal): String = NumberFormat.getNumberInstance(Locale.US).apply { minimumFractionDigits = 2; maximumFractionDigits = 2 }.format(value)
