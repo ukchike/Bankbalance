@@ -13,19 +13,25 @@ BankBalance extracts the latest reported balances from user-authorised bank noti
 - Account-level inclusion and dashboard visibility controls.
 - No bank credentials, PINs or OTPs are collected.
 
-## Current implementation
+## Implemented foundation
 - Android Compose application shell and navigation.
 - Room/SQLite local persistence for bank accounts and balance observations.
 - Add-account workflow supporting NGN, USD and other three-letter currency codes.
 - Multiple accounts under the same institution.
 - Currency-separated totals using decimal arithmetic.
 - Independent controls to exclude an account from totals or hide it from the dashboard.
-- Manual opening/latest balance entry for initial testing.
+- Manual balance entry for initial testing.
+
+## Phase 3: Bank notification intelligence
+- First-pass deterministic sender identification and parser for the supplied Nigerian bank SMS formats.
+- Extracts explicit balance, account hint, transaction amount/direction, currency, event date/time and warnings.
+- Unit tests added for redacted examples.
+- Parser is not yet connected to live SMS, app notification or Gmail ingestion.
 
 ## Important distinction
 Balances are the latest validated reported observations, not live bank API balances. Each observation retains its source, balance type, event timestamp and receipt timestamp.
 
 ## Development status
-Phase 1 foundation and Phase 2 local account management/dashboard are committed. SMS/app notification ingestion, parsers, Gmail, cloud sync and automated tests remain future phases.
+Phases 1-3 source foundations are committed. Automated build/test verification and live notification ingestion remain outstanding.
 
-See [requirements](docs/REQUIREMENTS.md), [architecture](docs/ARCHITECTURE.md) and [parser design](docs/BANK_PARSERS.md).
+See [requirements](docs/REQUIREMENTS.md), [architecture](docs/ARCHITECTURE.md), [parser design](docs/BANK_PARSERS.md) and [Phase 3 notes](docs/PHASE_3.md).
