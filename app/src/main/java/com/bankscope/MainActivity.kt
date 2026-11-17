@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -175,9 +176,16 @@ private fun AccountBalanceCard(account: BankAccountEntity) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
-                    Text(account.institutionName, style = MaterialTheme.typography.titleMedium)
-                    Text("••${account.accountIdentifier.takeLast(4)} · ${account.currencyCode}", style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(42.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(account.institutionName.filter(Char::isLetter).take(2).uppercase(), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                    Column {
+                        Text(account.institutionName, style = MaterialTheme.typography.titleMedium)
+                        Text("••${account.accountIdentifier.takeLast(4)} · ${account.currencyCode}", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 Text(
                     account.latestBalanceAmount?.let { "${account.currencyCode} ${formatMoney(BigDecimal(it))}" } ?: "Balance unavailable",
