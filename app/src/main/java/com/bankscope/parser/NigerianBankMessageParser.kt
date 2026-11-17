@@ -106,7 +106,8 @@ class NigerianBankMessageParser(
         if (account == null) warnings += "No explicit account identifier; account must be matched manually"
         if (eventAt == null) warnings += "No reliable event timestamp found"
         if (dateOnly) warnings += "Event date has no time component"
-        if (balanceMatch == null) warnings += "Transaction alert did not include a reported balance"\n        if (balanceMatch != null && balanceType == "UNKNOWN") warnings += "Balance type is not explicitly identified as available or current"
+        if (balanceMatch == null) warnings += "Transaction alert did not include a reported balance"
+        if (balanceMatch != null && balanceType == "UNKNOWN") warnings += "Balance type is not explicitly identified as available or current"
         if (dateWarning != null) warnings += dateWarning
 
         val description = Regex("""(?i)\bDesc\s*:\s*([^\n]+)""")
