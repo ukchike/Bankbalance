@@ -9,7 +9,7 @@ object TransactionCsvExporter {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
         val header = listOf(
             "Institution", "Account suffix", "Direction", "Amount", "Currency",
-            "Description", "Event date", "Received date", "Source", "Confidence", "Review status"
+            "Description", "Category", "Internal transfer", "Event date", "Received date", "Source", "Confidence", "Review status"
         )
         val lines = mutableListOf(header.joinToString(",") { csvEscape(it) })
         rows.forEach { row ->
@@ -20,6 +20,8 @@ object TransactionCsvExporter {
                 row.amount.orEmpty(),
                 row.currencyCode,
                 row.description.orEmpty(),
+                row.category,
+                row.isInternalTransfer.toString(),
                 row.eventAt?.let { dateFormat.format(Date(it)) }.orEmpty(),
                 dateFormat.format(Date(row.receivedAt)),
                 row.sourceType,
