@@ -6,6 +6,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
@@ -34,16 +35,16 @@ class NigerianBankMessageParser(
             "ACCOUNT" to Regex("""(?i)\bAccount\s*(?:No)?\s*:?\s*([0-9X*]{4,})""")
         )
         private val dateTimePatterns = listOf(
-            DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH),
-            DateTimeFormatter.ofPattern("dd-MMM-uu HH:mm:ss", Locale.ENGLISH),
+            DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("dd-MMM-yyyy HH:mm:ss").toFormatter(Locale.ENGLISH),
+            DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("dd-MMM-uu HH:mm:ss").toFormatter(Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", Locale.ENGLISH)
         )
         private val datePatterns = listOf(
-            DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH),
-            DateTimeFormatter.ofPattern("dd-MMM-uu", Locale.ENGLISH),
+            DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("dd-MMM-yyyy").toFormatter(Locale.ENGLISH),
+            DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("dd-MMM-uu").toFormatter(Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd-MM-yyyy", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.ENGLISH)
         )
