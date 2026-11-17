@@ -11,6 +11,9 @@ interface BankAccountDao {
     @Query("SELECT * FROM bank_accounts ORDER BY institutionName COLLATE NOCASE, accountIdentifier")
     fun observeAllAccounts(): Flow<List<BankAccountEntity>>
 
+    @Query("SELECT * FROM bank_accounts WHERE lower(institutionName) = lower(:institution) AND upper(currencyCode) = upper(:currency)")
+    suspend fun getAccountsForInstitution(institution: String, currency: String): List<BankAccountEntity>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAccount(account: BankAccountEntity)
 
@@ -22,4 +25,25 @@ interface BankAccountDao {
 
     @Query("UPDATE bank_accounts SET isHidden = :hidden WHERE accountId = :accountId")
     suspend fun setHidden(accountId: String, hidden: Boolean)
+
+    @Query("""
+        UPDATE bank_accounts
+        SET latestBalanceAmount = :amount,
+            latestBalanceType = :balanceType,
+            latestBalanceEventAt = :eventAt,
+            lastReceivedAt = :receivedAt
+        WHERE accountId = :accountId
+          AND (
+            latestBalanceEventAt IS NULL
+            OR (:eventAt IS NOT NULL AND :eventAt >= latestBalanceEventAt)
+            OR (:eventAt IS NULL AND latestBalanceEventAt IS NULL AND (lastReceivedAt IS NULL OR :receivedAt >= lastReceivedAt))
+          )
+    """)
+    suspend fun updateLatestBalanceIfNewer(
+        accountId: String,
+        amount: String,
+        balanceType: String,
+        eventAt: Long?,
+        receivedAt: Long
+    )
 }
