@@ -37,6 +37,8 @@ class TransactionReviewRepository(private val dao: BankAccountDao) {
             sourceType = sourceType,
             confidence = parsed.confidence,
             deduplicationFingerprint = fingerprint,
+            category = TransactionCategoriser.suggest(parsed.descriptionHint, parsed.transactionDirection).name,
+            isInternalTransfer = TransactionCategoriser.suggest(parsed.descriptionHint, parsed.transactionDirection) == TransactionCategory.TRANSFER,
             reviewStatus = when {
                 matchedAccount == null -> "NEEDS_ACCOUNT_REVIEW"
                 parsed.confidence < 0.85 -> "NEEDS_CONFIRMATION"
