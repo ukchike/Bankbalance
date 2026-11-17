@@ -27,7 +27,7 @@ class NigerianBankMessageParser(
             """(?i)\b(?:amt|amount|cr\s*amt|debit\s*alert|credit\s*alert)\s*[:=]?\s*(?:(NGN|₦|USD|\$|GBP|£)\s*)?([\d,]+(?:\.\d{1,2})?)"""
         )
         private val accountRegexes = listOf(
-            "ACCOUNT" to Regex("""(?i)\\bDebit\\s*:\\s*([0-9X*]{4,})\\s+Amt\\b"""),
+            "ACCOUNT" to Regex("""(?i)\bDebit\s*:\s*([0-9X*]{4,})\s+Amt\b"""),
             "A/C" to Regex("""(?i)\bA\s*/\s*C\s*:\s*([0-9X*]{4,})"""),
             "ACCOUNT" to Regex("""(?i)\bAcct(?:\s*No)?\s*:?\s*([0-9X*]{4,})"""),
             "ACCOUNT" to Regex("""(?i)\bAcc\s*:?\s*([0-9X*]{4,})"""),
