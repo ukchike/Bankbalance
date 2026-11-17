@@ -26,9 +26,6 @@ interface BankAccountDao {
     @Query("SELECT * FROM bank_transactions WHERE reviewStatus != 'MATCHED' ORDER BY receivedAt DESC")
     fun observeTransactionsNeedingReview(): Flow<List<TransactionEntity>>
 
-    @Query("SELECT currencyCode, direction, substr(date(eventAt / 1000, 'unixepoch'), 1, 7) AS monthKey, SUM(CAST(amount AS REAL)) AS total, COUNT(*) AS transactionCount FROM bank_transactions WHERE eventAt IS NOT NULL AND amount IS NOT NULL AND reviewStatus = 'MATCHED' GROUP BY currencyCode, direction, monthKey ORDER BY monthKey DESC")
-    fun observeMonthlySummaries(): Flow<List<MonthlyTransactionSummary>>
-
     @Query("UPDATE bank_transactions SET accountId = :accountId, reviewStatus = 'MATCHED' WHERE transactionId = :transactionId")
     suspend fun assignTransaction(transactionId: String, accountId: String)
 
