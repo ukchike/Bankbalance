@@ -7,6 +7,7 @@ import android.util.Log
 import com.bankscope.data.BankBalanceDatabase
 import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.BalanceObservationEntity
+import com.bankscope.data.TransactionReviewRepository
 import com.bankscope.parser.BankParseResult
 import com.bankscope.parser.NigerianBankMessageParser
 import java.math.BigDecimal
@@ -82,6 +83,11 @@ class BankNotificationListener : NotificationListenerService() {
             deduplicationFingerprint = fingerprint
         )
         val inserted = dao.insertObservation(observation)
+        TransactionReviewRepository(dao).record(
+            parsed = parsed,
+            sourceType = "APP_NOTIFICATION",
+            receivedAt = receivedAt
+        )
         if (inserted != -1L) {
             dao.updateLatestBalanceIfNewer(
                 accountId = matched.accountId,
