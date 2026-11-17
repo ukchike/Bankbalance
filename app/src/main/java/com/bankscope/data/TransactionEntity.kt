@@ -26,5 +26,7 @@ data class TransactionEntity(
     val sourceType: String,
     val confidence: Double,
     val deduplicationFingerprint: String,
-    val reviewStatus: String
+    val reviewStatus: String,
+    val category: String = TransactionCategory.OTHER.name,
+    val isInternalTransfer: Boolean = false
 )
