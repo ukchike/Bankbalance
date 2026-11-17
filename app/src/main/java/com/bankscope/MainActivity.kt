@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.bankscope.notifications.NotificationAccess
 import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.BankAccountRepository
 import com.bankscope.data.BankBalanceDatabase
@@ -34,6 +36,7 @@ class MainActivity : ComponentActivity() {
 private fun BankBalanceApp(repository: BankAccountRepository) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAddDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val accounts by repository.observeAll().collectAsState(initial = emptyList())
     val visibleAccounts = accounts.filter { !it.isHidden }
@@ -56,6 +59,7 @@ private fun BankBalanceApp(repository: BankAccountRepository) {
                         }
                     },
                     actions = {
+                        TextButton(onClick = { NotificationAccess.openSettings(context) }) { Text("Enable notifications") }
                         TextButton(onClick = { showAddDialog = true }) { Text("Add account") }
                     }
                 )
@@ -118,7 +122,7 @@ private fun DashboardScreen(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("No balances recorded yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Add an account and enter its latest reported balance. Notification connections will be added in a later phase.")
+                    Text("Add an account and enter its latest reported balance. Use Enable notifications to connect supported Android app alerts.")
                 }
             }
         } else {
