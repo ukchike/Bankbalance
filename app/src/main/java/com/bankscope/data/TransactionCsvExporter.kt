@@ -11,7 +11,7 @@ object TransactionCsvExporter {
             "Institution", "Account suffix", "Direction", "Amount", "Currency",
             "Description", "Event date", "Received date", "Source", "Confidence", "Review status"
         )
-        val lines = mutableListOf(header.joinToString(","))
+        val lines = mutableListOf(header.joinToString(",") { csvEscape(it) })
         rows.forEach { row ->
             val values = listOf(
                 row.institutionName,
