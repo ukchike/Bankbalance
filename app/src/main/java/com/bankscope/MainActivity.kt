@@ -26,14 +26,15 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = BankAccountRepository(BankBalanceDatabase.getInstance(this).bankAccountDao())
-        setContent { BankBalanceApp(repository) }
+        val dao = BankBalanceDatabase.getInstance(this).bankAccountDao()
+        val repository = BankAccountRepository(dao)
+        setContent { BankBalanceApp(repository, dao) }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BankBalanceApp(repository: BankAccountRepository) {
+private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope.data.BankAccountDao) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAddDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -78,18 +79,14 @@ private fun BankBalanceApp(repository: BankAccountRepository) {
                         icon = { Text("≡") },
                         label = { Text("Accounts") }
                     )
+                    NavigationBarItem(selected = selectedTab == 2, onClick = { selectedTab = 2 }, icon = { Text("₦") }, label = { Text("Transactions") })
                 }
             }
         ) { padding ->
-            if (selectedTab == 0) {
-                DashboardScreen(visibleAccounts, totals, Modifier.padding(padding))
-            } else {
-                AccountsScreen(
-                    accounts = accounts,
-                    onIncludeChange = { id, value -> scope.launch { repository.setIncluded(id, value) } },
-                    onHiddenChange = { id, value -> scope.launch { repository.setHidden(id, value) } },
-                    modifier = Modifier.padding(padding)
-                )
+            when (selectedTab) {
+                0 -> DashboardScreen(visibleAccounts, totals, Modifier.padding(padding))
+                1 -> AccountsScreen(accounts, { id, value -> scope.launch { repository.setIncluded(id, value) } }, { id, value -> scope.launch { repository.setHidden(id, value) } }, Modifier.padding(padding))
+                else -> TransactionHistoryScreen(dao, accounts, Modifier.padding(padding))
             }
         }
 
