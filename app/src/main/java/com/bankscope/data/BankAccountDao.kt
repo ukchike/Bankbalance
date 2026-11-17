@@ -29,6 +29,18 @@ interface BankAccountDao {
     @Query("UPDATE bank_transactions SET accountId = :accountId, reviewStatus = 'MATCHED' WHERE transactionId = :transactionId")
     suspend fun assignTransaction(transactionId: String, accountId: String)
 
+    @Query("UPDATE bank_transactions SET category = :category, isInternalTransfer = :isInternalTransfer WHERE transactionId = :transactionId")
+    suspend fun updateTransactionCategory(transactionId: String, category: String, isInternalTransfer: Boolean)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertBudget(budget: BudgetEntity)
+
+    @Query("SELECT * FROM category_budgets WHERE monthKey = :monthKey ORDER BY category")
+    fun observeBudgets(monthKey: String): Flow<List<BudgetEntity>>
+
+    @Query("DELETE FROM category_budgets WHERE budgetId = :budgetId")
+    suspend fun deleteBudget(budgetId: String)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertObservation(observation: BalanceObservationEntity): Long
 
