@@ -27,6 +27,7 @@ class NigerianBankMessageParser(
             """(?i)\b(?:amt|amount|cr\s*amt|debit\s*alert|credit\s*alert)\s*[:=]?\s*(?:(NGN|₦|USD|\$|GBP|£)\s*)?([\d,]+(?:\.\d{1,2})?)"""
         )
         private val accountRegexes = listOf(
+            "ACCOUNT" to Regex("""(?i)\\bDebit\\s*:\\s*([0-9X*]{4,})\\s+Amt\\b"""),
             "A/C" to Regex("""(?i)\bA\s*/\s*C\s*:\s*([0-9X*]{4,})"""),
             "ACCOUNT" to Regex("""(?i)\bAcct(?:\s*No)?\s*:?\s*([0-9X*]{4,})"""),
             "ACCOUNT" to Regex("""(?i)\bAcc\s*:?\s*([0-9X*]{4,})"""),
@@ -34,7 +35,7 @@ class NigerianBankMessageParser(
         )
         private val dateTimePatterns = listOf(
             DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm:ss", Locale.ENGLISH),
-            DateTimeFormatter.ofPattern("dd-MMM-yy HH:mm:ss", Locale.ENGLISH),
+            DateTimeFormatter.ofPattern("dd-MMM-uu HH:mm:ss", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm", Locale.ENGLISH),
@@ -42,7 +43,7 @@ class NigerianBankMessageParser(
         )
         private val datePatterns = listOf(
             DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH),
-            DateTimeFormatter.ofPattern("dd-MMM-yy", Locale.ENGLISH),
+            DateTimeFormatter.ofPattern("dd-MMM-uu", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd-MM-yyyy", Locale.ENGLISH),
             DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.ENGLISH)
         )
