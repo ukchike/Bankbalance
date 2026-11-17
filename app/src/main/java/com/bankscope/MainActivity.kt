@@ -9,9 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,7 +39,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
     var showAddDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val appearance = remember { context.getSharedPreferences("appearance", MODE_PRIVATE) }
+    val appearance = remember { context.getSharedPreferences("appearance", 0) }
     var themeChoice by remember { mutableStateOf(appearance.getString("theme", "SYSTEM") ?: "SYSTEM") }
     var showThemeMenu by remember { mutableStateOf(false) }
     val useDarkTheme = when (themeChoice) {
