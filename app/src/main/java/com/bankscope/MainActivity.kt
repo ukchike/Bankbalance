@@ -9,6 +9,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,6 +42,14 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
     var showAddDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val appearance = remember { context.getSharedPreferences("appearance", MODE_PRIVATE) }
+    var themeChoice by remember { mutableStateOf(appearance.getString("theme", "SYSTEM") ?: "SYSTEM") }
+    var showThemeMenu by remember { mutableStateOf(false) }
+    val useDarkTheme = when (themeChoice) {
+        "DARK" -> true
+        "LIGHT" -> false
+        else -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
     val accounts by repository.observeAll().collectAsState(initial = emptyList())
     val visibleAccounts = accounts.filter { !it.isHidden }
     val totals = accounts.filter { it.isIncluded && it.latestBalanceAmount != null }
@@ -49,7 +60,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
             }
         }
 
-    MaterialTheme {
+    MaterialTheme(colorScheme = if (useDarkTheme) darkColorScheme() else lightColorScheme()) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -60,7 +71,19 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                         }
                     },
                     actions = {
-                        TextButton(onClick = { NotificationAccess.openSettings(context) }) { Text("Enable notifications") }
+                        Box {
+                            TextButton(onClick = { showThemeMenu = true }) { Text(if (themeChoice == "SYSTEM") "Theme" else themeChoice.lowercase().replaceFirstChar { it.uppercase() }) }
+                            DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
+                                listOf("SYSTEM", "LIGHT", "DARK").forEach { choice ->
+                                    DropdownMenuItem(text = { Text(choice.lowercase().replaceFirstChar { it.uppercase() }) }, onClick = {
+                                        themeChoice = choice
+                                        appearance.edit().putString("theme", choice).apply()
+                                        showThemeMenu = false
+                                    })
+                                }
+                            }
+                        }
+                        TextButton(onClick = { NotificationAccess.openSettings(context) }) { Text("Notifications") }
                         TextButton(onClick = { showAddDialog = true }) { Text("Add account") }
                     }
                 )
