@@ -15,6 +15,8 @@ import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.TransactionCsvExporter
 import com.bankscope.data.TransactionEntity
 import java.math.BigDecimal
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -26,7 +28,21 @@ fun TransactionHistoryScreen(
     modifier: Modifier = Modifier
 ) {
     val transactions by dao.observeTransactions().collectAsState(initial = emptyList())
-    val summaries by dao.observeMonthlySummaries().collectAsState(initial = emptyList())
+    val summaries = remember(transactions) {
+        val monthFormat = SimpleDateFormat("yyyy-MM", Locale.US)
+        transactions.filter { it.eventAt != null && it.amount != null && it.reviewStatus == "MATCHED" }
+            .groupBy { row -> Triple(row.currencyCode, row.direction, monthFormat.format(Date(row.eventAt!!))) }
+            .map { (key, rows) ->
+                com.bankscope.data.MonthlyTransactionSummary(
+                    currencyCode = key.first,
+                    direction = key.second,
+                    monthKey = key.third,
+                    total = rows.fold(BigDecimal.ZERO) { sum, row -> sum + BigDecimal(row.amount!!) },
+                    transactionCount = rows.size
+                )
+            }
+            .sortedByDescending { it.monthKey }
+    }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("ALL") }
     var assigning by remember { mutableStateOf<TransactionEntity?>(null) }
