@@ -73,14 +73,24 @@ class NigerianBankMessageParser(
             ?: return BankParseResult.Rejected("Unrecognised bank or notification sender")
 
         val balanceMatch = balanceRegex.find(body)
-            ?: return BankParseResult.Rejected("No explicit reported balance found")
+        val amountMatch = amountRegex.find(body)
+        val transactionAmount = amountMatch?.groupValues?.get(2)?.let(::normaliseAmount)
+        val direction = when {
+            Regex("""(?i)\bdebit\b|\bDR\b""").containsMatchIn(body) -> "DEBIT"
+            Regex("""(?i)\bcredit\b|\bCR\b""").containsMatchIn(body) -> "CREDIT"
+            else -> null
+        }
+        if (balanceMatch == null && (transactionAmount == null || direction == null)) {
+            return BankParseResult.Rejected("No reported balance or complete debit/credit transaction details found")
+        }
 
-        val rawBalance = balanceMatch.groupValues[3]
-        val balance = normaliseAmount(rawBalance)
-            ?: return BankParseResult.Rejected("Reported balance is not a valid decimal amount")
-
-        val currency = currencyCode(balanceMatch.groupValues[2], body)
-        val balanceLabel = balanceMatch.groupValues[1].lowercase(Locale.ROOT)
+        val balance = balanceMatch?.groupValues?.get(3)?.let(::normaliseAmount)
+        if (balanceMatch != null && balance == null) {
+            return BankParseResult.Rejected("Reported balance is not a valid decimal amount")
+        }
+        val currencyMarker = balanceMatch?.groupValues?.get(2) ?: amountMatch?.groupValues?.get(1)
+        val currency = currencyCode(currencyMarker, body)
+        val balanceLabel = balanceMatch?.groupValues?.get(1)?.lowercase(Locale.ROOT).orEmpty()
         val balanceType = when {
             "avail" in balanceLabel -> "AVAILABLE"
             "c." in balanceLabel -> "CURRENT"
@@ -91,20 +101,12 @@ class NigerianBankMessageParser(
             regex.find(body)?.let { type to it.groupValues[1] }
         }
 
-        val amountMatch = amountRegex.find(body)
-        val transactionAmount = amountMatch?.groupValues?.get(2)?.let(::normaliseAmount)
-        val direction = when {
-            Regex("""(?i)\bdebit\b|\bDR\b""").containsMatchIn(body) -> "DEBIT"
-            Regex("""(?i)\bcredit\b|\bCR\b""").containsMatchIn(body) -> "CREDIT"
-            else -> null
-        }
-
         val (eventAt, dateOnly, dateWarning) = extractEventTime(body)
         val warnings = mutableListOf<String>()
         if (account == null) warnings += "No explicit account identifier; account must be matched manually"
         if (eventAt == null) warnings += "No reliable event timestamp found"
         if (dateOnly) warnings += "Event date has no time component"
-        if (balanceType == "UNKNOWN") warnings += "Balance type is not explicitly identified as available or current"
+        if (balanceMatch == null) warnings += "Transaction alert did not include a reported balance"\n        if (balanceMatch != null && balanceType == "UNKNOWN") warnings += "Balance type is not explicitly identified as available or current"
         if (dateWarning != null) warnings += dateWarning
 
         val description = Regex("""(?i)\bDesc\s*:\s*([^\n]+)""")
