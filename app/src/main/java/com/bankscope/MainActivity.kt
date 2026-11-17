@@ -37,7 +37,7 @@ private fun BankBalanceApp(repository: BankAccountRepository) {
     val scope = rememberCoroutineScope()
     val accounts by repository.observeAll().collectAsState(initial = emptyList())
     val visibleAccounts = accounts.filter { !it.isHidden }
-    val totals = visibleAccounts.filter { it.isIncluded && it.latestBalanceAmount != null }
+    val totals = accounts.filter { it.isIncluded && it.latestBalanceAmount != null }
         .groupBy { it.currencyCode }
         .mapValues { (_, rows) ->
             rows.fold(BigDecimal.ZERO) { total, account ->
@@ -268,7 +268,7 @@ private fun AddAccountDialog(
                     bank.isBlank() || identifier.isBlank() || currency.trim().length != 3 ->
                         error = "Enter a bank, account identifier and 3-letter currency code."
                     !validAmount -> error = "Enter a valid balance amount."
-                    else -> onSave(bank, identifier, currency, type, balance.replace(",", "").ifBlank { null })
+                    else -> onSave(bank, identifier, currency, type, balance.replace(",", "").takeIf { it.isNotBlank() })
                 }
             }) { Text("Save account") }
         },
