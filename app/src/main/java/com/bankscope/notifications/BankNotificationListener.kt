@@ -26,17 +26,23 @@ class BankNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val packageName = sbn.packageName ?: return
         val store = NotificationCaptureStore(this)
-        if (!store.isEnabled() || !store.isPackageAllowed(packageName)) return
+        if (!store.isEnabled()) return
 
         val extras = sbn.notification.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
             ?.takeIf { it.isNotBlank() }
             ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
-        val body = listOf(title, text).filter { it.isNotBlank() }.joinToString("\n")
+        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            ?.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
+            .orEmpty()
+        val appLabel = runCatching {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
+        }.getOrDefault("")
+        val sourceName = NotificationSources.resolve(packageName, title, appLabel) ?: return
+        if (!store.isSourceEnabled(packageName)) return
+        val body = (listOf(title, text) + lines).filter { it.isNotBlank() }.distinct().joinToString("\n")
         if (body.isBlank()) return
-
-        val sourceName = NotificationSources.displayName(packageName) ?: return
         val receivedAt = sbn.postTime
         serviceScope.launch {
             try {
