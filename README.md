@@ -32,13 +32,15 @@ BankBalance extracts the latest reported balances from user-authorised bank noti
 - Added keyword-based suggested categories for transfers, airtime/data, utilities, food/dining, transport, subscriptions, cash withdrawals, bank charges, income, shopping and other.
 - Own-account transfer keywords are checked before credit/income classification; internal transfers are separately flagged for spending analysis.
 - Added category and internal-transfer fields to transactions with a Room v2-to-v3 migration.
-- Added currency-specific monthly category budget storage and category update DAO operations.
-- Added unit tests for category classification and included category/transfer fields in CSV exports.
+- Added transaction category editing and an own-account transfer override in the Transactions screen.
+- Added monthly budget creation, replacement and deletion by category, currency and YYYY-MM period.
+- Added current-month budget-versus-actual progress and category spending summaries, excluding unmatched transactions and flagged internal transfers.
+- CSV exports include category and internal-transfer fields.
 
 ## Important distinction
 Balances are the latest validated reported observations, not live bank API balances. Each observation retains its source, balance type, event timestamp and receipt timestamp.
 
 ## Development status
-Phases 1-8 foundations are committed. Android notification collection requires device validation; live Gmail authorisation/retrieval, complete budget-management UI and successful CI verification remain outstanding.
+Phase 8 category and budgeting UI is committed. Android notification collection and the new category/budget workflows require physical-device validation; live Gmail authorisation/retrieval and successful CI verification remain outstanding.
 
 See [requirements](docs/REQUIREMENTS.md), [architecture](docs/ARCHITECTURE.md), [parser design](docs/BANK_PARSERS.md) and [Phase 3 notes](docs/PHASE_3.md).
