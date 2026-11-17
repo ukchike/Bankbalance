@@ -18,6 +18,18 @@ interface BankAccountDao {
     suspend fun insertAccount(account: BankAccountEntity)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertTransaction(transaction: TransactionEntity): Long
+
+    @Query("SELECT * FROM bank_transactions ORDER BY COALESCE(eventAt, receivedAt) DESC")
+    fun observeTransactions(): Flow<List<TransactionEntity>>
+
+    @Query("SELECT * FROM bank_transactions WHERE reviewStatus != 'MATCHED' ORDER BY receivedAt DESC")
+    fun observeTransactionsNeedingReview(): Flow<List<TransactionEntity>>
+
+    @Query("UPDATE bank_transactions SET accountId = :accountId, reviewStatus = 'MATCHED' WHERE transactionId = :transactionId")
+    suspend fun assignTransaction(transactionId: String, accountId: String)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertObservation(observation: BalanceObservationEntity): Long
 
     @Query("UPDATE bank_accounts SET isIncluded = :included WHERE accountId = :accountId")
