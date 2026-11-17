@@ -64,6 +64,15 @@ class BankNotificationListener : NotificationListenerService() {
     ) {
         val db = BankBalanceDatabase.getInstance(applicationContext)
         val dao = db.bankAccountDao()
+        if (parsed.reportedBalance == null) {
+            TransactionReviewRepository(dao).record(
+                parsed = parsed,
+                sourceType = "APP_NOTIFICATION",
+                receivedAt = receivedAt
+            )
+            Log.i(TAG, "Recorded transaction alert without a balance from $packageName")
+            return
+        }
         val accounts = dao.getAccountsForInstitution(parsed.institution, parsed.currencyCode)
         val matched = accounts.firstOrNull { account ->
             accountHintMatches(parsed.accountHint, account.accountIdentifier)
@@ -78,7 +87,7 @@ class BankNotificationListener : NotificationListenerService() {
         val observation = BalanceObservationEntity(
             observationId = UUID.randomUUID().toString(),
             accountId = matched.accountId,
-            amount = BigDecimal(parsed.reportedBalance).toPlainString(),
+            amount = BigDecimal(parsed.reportedBalance!!).toPlainString(),
             currencyCode = parsed.currencyCode,
             balanceType = parsed.balanceType,
             eventAt = parsed.eventAtEpochMillis,
