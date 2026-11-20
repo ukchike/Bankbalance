@@ -23,9 +23,9 @@ object NotificationSources {
      * title and installed app label. This avoids silently dropping bank apps whose
      * Android package identifier differs from the small initial allow-list.
      */
-    fun resolve(packageName: String, notificationTitle: String, appLabel: String): String? {
+    fun resolve(packageName: String, notificationTitle: String, appLabel: String, messageText: String = ""): String? {
         displayName(packageName)?.let { return it }
-        val candidates = listOf(notificationTitle, appLabel, packageName)
+        val candidates = listOf(notificationTitle, appLabel, packageName, messageText)
         for (candidate in candidates) {
             val key = candidate.lowercase().replace(Regex("[^a-z0-9]"), "")
             when {
