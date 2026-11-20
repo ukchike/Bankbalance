@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.bankscope.notifications.NotificationAccess
 import com.bankscope.notifications.SmsInboxImporter
+import com.bankscope.notifications.NotificationDiagnostics
 import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.BankAccountRepository
 import com.bankscope.data.BankBalanceDatabase
@@ -44,6 +45,8 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
     var showAddDialog by remember { mutableStateOf(false) }
     var smsImportMessage by remember { mutableStateOf<String?>(null) }
     var importingSms by remember { mutableStateOf(false) }
+    var showDiagnostics by remember { mutableStateOf(false) }
+    var diagnosticSnapshot by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -100,6 +103,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                                 }
                             }
                         }
+                        TextButton(onClick = { diagnosticSnapshot = NotificationDiagnostics(context).snapshot(); showDiagnostics = true }) { Text("Diagnostics") }
                         TextButton(onClick = { NotificationAccess.openSettings(context) }) { Text("Notifications") }
                         TextButton(enabled = !importingSms, onClick = { smsPermissionLauncher.launch(Manifest.permission.READ_SMS) }) { Text(if (importingSms) "Importing…" else "Import SMS") }
                         TextButton(onClick = { showAddDialog = true }) { Text("Add account") }
@@ -130,6 +134,8 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                 else -> TransactionHistoryScreen(dao, accounts, Modifier.padding(padding))
             }
         }
+
+        if (showDiagnostics) AlertDialog(onDismissRequest = { showDiagnostics = false }, title = { Text("Capture diagnostics") }, text = { Column { Text("Notification access: " + if (NotificationAccess.isGranted(context)) "Granted" else "Not granted"); diagnosticSnapshot.forEach { (key, value) -> Text(key.replace("_", " ").replaceFirstChar { it.uppercase() } + ": " + value) } } }, confirmButton = { TextButton(onClick = { diagnosticSnapshot = NotificationDiagnostics(context).snapshot() }) { Text("Refresh") } }, dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("Close") } }) }
 
         smsImportMessage?.let { message -> AlertDialog(onDismissRequest = { smsImportMessage = null }, title = { Text("SMS import result") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { smsImportMessage = null }) { Text("Close") } }) }
 
