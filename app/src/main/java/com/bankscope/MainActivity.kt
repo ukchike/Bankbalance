@@ -1,8 +1,11 @@
 package com.bankscope
 
 import android.os.Bundle
+import android.Manifest
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.bankscope.notifications.NotificationAccess
+import com.bankscope.notifications.SmsInboxImporter
 import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.BankAccountRepository
 import com.bankscope.data.BankBalanceDatabase
@@ -38,8 +42,23 @@ class MainActivity : ComponentActivity() {
 private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope.data.BankAccountDao) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var smsImportMessage by remember { mutableStateOf<String?>(null) }
+    var importingSms by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            importingSms = true
+            scope.launch {
+                val result = runCatching { SmsInboxImporter(context, dao).importRecent(90) }
+                smsImportMessage = result.fold(
+                    { result -> "Scanned " + result.scanned + " SMS messages. Imported " + result.imported + " transactions; " + result.ignored + " were not recognised." },
+                    { error -> "SMS import failed: " + (error.message ?: "Unknown error") }
+                )
+                importingSms = false
+            }
+        } else smsImportMessage = "SMS permission was not granted. No messages were read."
+    }
     val appearance = remember { context.getSharedPreferences("appearance", 0) }
     var themeChoice by remember { mutableStateOf(appearance.getString("theme", "SYSTEM") ?: "SYSTEM") }
     var showThemeMenu by remember { mutableStateOf(false) }
@@ -82,6 +101,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                             }
                         }
                         TextButton(onClick = { NotificationAccess.openSettings(context) }) { Text("Notifications") }
+                        TextButton(enabled = !importingSms, onClick = { smsPermissionLauncher.launch(Manifest.permission.READ_SMS) }) { Text(if (importingSms) "Importing…" else "Import SMS") }
                         TextButton(onClick = { showAddDialog = true }) { Text("Add account") }
                     }
                 )
@@ -110,6 +130,8 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                 else -> TransactionHistoryScreen(dao, accounts, Modifier.padding(padding))
             }
         }
+
+        smsImportMessage?.let { message -> AlertDialog(onDismissRequest = { smsImportMessage = null }, title = { Text("SMS import result") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { smsImportMessage = null }) { Text("Close") } }) }
 
         if (showAddDialog) {
             AddAccountDialog(
