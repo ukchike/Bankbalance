@@ -5,7 +5,6 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.bankscope.data.BankBalanceDatabase
-import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.BalanceObservationEntity
 import com.bankscope.data.TransactionReviewRepository
 import com.bankscope.parser.BankParseResult
@@ -24,70 +23,87 @@ class BankNotificationListener : NotificationListenerService() {
     private val parser = NigerianBankMessageParser()
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        val packageName = sbn.packageName ?: return
         val store = NotificationCaptureStore(this)
         if (!store.isEnabled()) return
 
-        val extras = sbn.notification.extras ?: return
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val text = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
-            ?.takeIf { it.isNotBlank() }
-            ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
-        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-            ?.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
-            .orEmpty()
+        val packageName = sbn.packageName ?: return
+        val extras = sbn.notification.extras
+        val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        val bigText = extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()
+        val text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val lines = extras?.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+            ?.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }.orEmpty()
+        val ticker = sbn.notification.tickerText?.toString().orEmpty()
+        val body = (listOf(title, bigText, text, ticker) + lines)
+            .filter { it.isNotBlank() }.distinct().joinToString("\n")
+        if (body.isBlank()) return
+
         val appLabel = runCatching {
             packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
-        }.getOrDefault("")
-        val sourceName = NotificationSources.resolve(packageName, title, appLabel) ?: return
-        if (!store.isSourceEnabled(packageName)) return
-        val body = (listOf(title, text) + lines).filter { it.isNotBlank() }.distinct().joinToString("\n")
-        if (body.isBlank()) return
+        }.getOrDefault(packageName)
+
+        val diagnostics = NotificationDiagnostics(this)
+        diagnostics.recordReceived(appLabel)
+        val sourceName = NotificationSources.resolve(packageName, title, appLabel, body)
+        if (sourceName == null) {
+            diagnostics.recordIgnored("Could not identify bank or wallet from app label or notification text")
+            return
+        }
+        if (!store.isSourceEnabled(packageName)) {
+            diagnostics.recordIgnored("Source disabled: $appLabel")
+            return
+        }
+
         val receivedAt = sbn.postTime
         serviceScope.launch {
             try {
                 when (val result = parser.parse(sourceName, body, receivedAt)) {
-                    is BankParseResult.Success -> persistObservation(result.message, receivedAt, packageName, body)
-                    is BankParseResult.Rejected -> Log.d(TAG, "Ignored notification: ${result.reason}")
+                    is BankParseResult.Success -> {
+                        val parsed = result.message
+                        val dao = BankBalanceDatabase.getInstance(applicationContext).bankAccountDao()
+                        val transaction = TransactionReviewRepository(dao).record(
+                            parsed = parsed,
+                            sourceType = if (packageName == "com.android.mms" || packageName == "com.google.android.apps.messaging") "SMS_NOTIFICATION" else "APP_NOTIFICATION",
+                            receivedAt = receivedAt,
+                            sourceFingerprint = sha256("$packageName|$body|$receivedAt")
+                        )
+                        diagnostics.recordParsed(parsed.institution, transaction != null)
+                        persistBalanceIfSafe(parsed, receivedAt, packageName, body)
+                    }
+                    is BankParseResult.Rejected -> {
+                        diagnostics.recordIgnored(result.reason)
+                        Log.d(TAG, "Ignored alert from $appLabel: ${result.reason}")
+                    }
                 }
             } catch (error: Exception) {
+                diagnostics.recordIgnored("Processing error: ${error.javaClass.simpleName}")
                 Log.e(TAG, "Notification processing failed", error)
             }
         }
     }
 
-    private suspend fun persistObservation(
+    private suspend fun persistBalanceIfSafe(
         parsed: com.bankscope.parser.ParsedBankMessage,
         receivedAt: Long,
         packageName: String,
         body: String
     ) {
-        val db = BankBalanceDatabase.getInstance(applicationContext)
-        val dao = db.bankAccountDao()
-        if (parsed.reportedBalance == null) {
-            TransactionReviewRepository(dao).record(
-                parsed = parsed,
-                sourceType = "APP_NOTIFICATION",
-                receivedAt = receivedAt
-            )
-            Log.i(TAG, "Recorded transaction alert without a balance from $packageName")
-            return
-        }
+        val balance = parsed.reportedBalance ?: return
+        val dao = BankBalanceDatabase.getInstance(applicationContext).bankAccountDao()
         val accounts = dao.getAccountsForInstitution(parsed.institution, parsed.currencyCode)
         val matched = accounts.firstOrNull { account ->
             accountHintMatches(parsed.accountHint, account.accountIdentifier)
         } ?: if (accounts.size == 1 && parsed.accountHint == null) accounts.first() else null
 
         if (matched == null) {
-            Log.w(TAG, "No unambiguous account match for ${parsed.institution}; notification not applied")
+            Log.w(TAG, "Transaction retained for review; no unambiguous balance account match for ${parsed.institution}")
             return
         }
 
-        val fingerprint = sha256("$packageName|$body|$receivedAt")
         val observation = BalanceObservationEntity(
             observationId = UUID.randomUUID().toString(),
             accountId = matched.accountId,
-            amount = BigDecimal(parsed.reportedBalance!!).toPlainString(),
+            amount = BigDecimal(balance).toPlainString(),
             currencyCode = parsed.currencyCode,
             balanceType = parsed.balanceType,
             eventAt = parsed.eventAtEpochMillis,
@@ -95,14 +111,9 @@ class BankNotificationListener : NotificationListenerService() {
             sourceType = "APP_NOTIFICATION",
             parserVersion = parsed.parserVersion,
             confidence = parsed.confidence,
-            deduplicationFingerprint = fingerprint
+            deduplicationFingerprint = sha256("$packageName|$body|$receivedAt")
         )
         val inserted = dao.insertObservation(observation)
-        TransactionReviewRepository(dao).record(
-            parsed = parsed,
-            sourceType = "APP_NOTIFICATION",
-            receivedAt = receivedAt
-        )
         if (inserted != -1L) {
             dao.updateLatestBalanceIfNewer(
                 accountId = matched.accountId,
@@ -118,14 +129,12 @@ class BankNotificationListener : NotificationListenerService() {
         if (hint.isNullOrBlank()) return false
         val digitsHint = hint.filter(Char::isDigit)
         val digitsAccount = accountIdentifier.filter(Char::isDigit)
-        if (digitsHint.length < 4 || digitsAccount.length < 4) return false
-        val suffix = digitsHint.takeLast(4)
-        return digitsAccount.endsWith(suffix)
+        return digitsHint.length >= 4 && digitsAccount.length >= 4 &&
+            digitsAccount.endsWith(digitsHint.takeLast(4))
     }
 
     private fun sha256(value: String): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray())
+        MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
             .joinToString("") { "%02x".format(it) }
 
     override fun onDestroy() {
@@ -133,7 +142,5 @@ class BankNotificationListener : NotificationListenerService() {
         super.onDestroy()
     }
 
-    companion object {
-        private const val TAG = "BankBalanceListener"
-    }
+    companion object { private const val TAG = "BankBalanceListener" }
 }
