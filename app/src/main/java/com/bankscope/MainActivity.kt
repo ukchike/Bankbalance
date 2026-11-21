@@ -135,7 +135,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
             }
         }
 
-        if (showDiagnostics) AlertDialog(onDismissRequest = { showDiagnostics = false }, title = { Text("Capture diagnostics") }, text = { Column { Text("Notification access: " + if (NotificationAccess.isGranted(context)) "Granted" else "Not granted"); diagnosticSnapshot.forEach { (key, value) -> Text(key.replace("_", " ").replaceFirstChar { it.uppercase() } + ": " + value) } } }, confirmButton = { TextButton(onClick = { diagnosticSnapshot = NotificationDiagnostics(context).snapshot() }) { Text("Refresh") } }, dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("Close") } }) }
+        if (showDiagnostics) AlertDialog(onDismissRequest = { showDiagnostics = false }, title = { Text("Capture diagnostics") }, text = { Column { Text("Notification access: " + if (NotificationAccess.isGranted(context)) "Granted" else "Not granted"); diagnosticSnapshot.forEach { (key, value) -> Text(key.replace("_", " ").replaceFirstChar { it.uppercase() } + ": " + value) } } }, confirmButton = { TextButton(onClick = { diagnosticSnapshot = NotificationDiagnostics(context).snapshot() }) { Text("Refresh") } }, dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("Close") } })
 
         smsImportMessage?.let { message -> AlertDialog(onDismissRequest = { smsImportMessage = null }, title = { Text("SMS import result") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { smsImportMessage = null }) { Text("Close") } }) }
 
