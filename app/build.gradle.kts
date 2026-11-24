@@ -10,6 +10,10 @@ val releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
 val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
 val releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
 
+base {
+    archivesName.set("bankbalance")
+}
+
 android {
     namespace = "com.bankscope"
     compileSdk = 35
