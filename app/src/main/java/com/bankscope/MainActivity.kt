@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.List as ListIcon
+import androidx.compose.material.icons.automirrored.filled.List as ListIcon
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Sms
@@ -161,7 +161,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                     NavigationBarItem(
                         selected = selectedTab == AppTab.ACCOUNTS,
                         onClick = { selectedTab = AppTab.ACCOUNTS },
-                        icon = { Icon(ListIcon, contentDescription = null) },
+                        icon = { Icon(Icons.AutoMirrored.Filled.ListIcon, contentDescription = null) },
                         label = { Text("Accounts") }
                     )
                     NavigationBarItem(
