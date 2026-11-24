@@ -6,15 +6,29 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.List as ListIcon
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -24,6 +38,13 @@ import com.bankscope.notifications.NotificationDiagnostics
 import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.BankAccountRepository
 import com.bankscope.data.BankBalanceDatabase
+import com.bankscope.ui.components.GroupedCard
+import com.bankscope.ui.components.GroupedRow
+import com.bankscope.ui.components.InitialsAvatar
+import com.bankscope.ui.components.LargeTitleHeader
+import com.bankscope.ui.components.appleCardShadow
+import com.bankscope.ui.theme.AppleSemantics
+import com.bankscope.ui.theme.BankBalanceTheme
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Locale
@@ -38,15 +59,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class AppTab(val label: String) { DASHBOARD("Dashboard"), ACCOUNTS("Accounts"), TRANSACTIONS("Transactions") }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope.data.BankAccountDao) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableStateOf(AppTab.DASHBOARD) }
     var showAddDialog by remember { mutableStateOf(false) }
     var smsImportMessage by remember { mutableStateOf<String?>(null) }
     var importingSms by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
     var diagnosticSnapshot by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -80,19 +104,39 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
             }
         }
 
-    MaterialTheme(colorScheme = if (useDarkTheme) darkColorScheme() else lightColorScheme()) {
+    BankBalanceTheme(useDarkTheme = useDarkTheme) {
         Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.92f)
+                    ),
                     title = {
-                        Column {
-                            Text("BankBalance")
-                            Text("Personal balance monitor", style = MaterialTheme.typography.labelSmall)
-                        }
+                        Text("BankBalance", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge)
                     },
                     actions = {
+                        IconButton(onClick = { showAddDialog = true }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Add account")
+                        }
                         Box {
-                            TextButton(onClick = { showThemeMenu = true }) { Text(if (themeChoice == "SYSTEM") "Theme" else themeChoice.lowercase().replaceFirstChar { it.uppercase() }) }
+                            IconButton(onClick = { showOverflowMenu = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                            }
+                            DropdownMenu(expanded = showOverflowMenu, onDismissRequest = { showOverflowMenu = false }) {
+                                DropdownMenuItem(text = { Text("Theme: " + themeChoice.lowercase().replaceFirstChar { it.uppercase() }) }, onClick = { showOverflowMenu = false; showThemeMenu = true })
+                                DropdownMenuItem(text = { Text("Diagnostics") }, leadingIcon = { Icon(Icons.Filled.Sms, null) }, onClick = {
+                                    diagnosticSnapshot = NotificationDiagnostics(context).snapshot(); showDiagnostics = true; showOverflowMenu = false
+                                })
+                                DropdownMenuItem(text = { Text("Notification access") }, leadingIcon = { Icon(Icons.Filled.Notifications, null) }, onClick = {
+                                    NotificationAccess.openSettings(context); showOverflowMenu = false
+                                })
+                                DropdownMenuItem(
+                                    text = { Text(if (importingSms) "Importing…" else "Import SMS") },
+                                    enabled = !importingSms,
+                                    onClick = { smsPermissionLauncher.launch(Manifest.permission.READ_SMS); showOverflowMenu = false }
+                                )
+                            }
                             DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
                                 listOf("SYSTEM", "LIGHT", "DARK").forEach { choice ->
                                     DropdownMenuItem(text = { Text(choice.lowercase().replaceFirstChar { it.uppercase() }) }, onClick = {
@@ -103,35 +147,46 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                                 }
                             }
                         }
-                        TextButton(onClick = { diagnosticSnapshot = NotificationDiagnostics(context).snapshot(); showDiagnostics = true }) { Text("Diagnostics") }
-                        TextButton(onClick = { NotificationAccess.openSettings(context) }) { Text("Notifications") }
-                        TextButton(enabled = !importingSms, onClick = { smsPermissionLauncher.launch(Manifest.permission.READ_SMS) }) { Text(if (importingSms) "Importing…" else "Import SMS") }
-                        TextButton(onClick = { showAddDialog = true }) { Text("Add account") }
                     }
                 )
             },
             bottomBar = {
-                NavigationBar {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     NavigationBarItem(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        icon = { Text("₦") },
+                        selected = selectedTab == AppTab.DASHBOARD,
+                        onClick = { selectedTab = AppTab.DASHBOARD },
+                        icon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null) },
                         label = { Text("Dashboard") }
                     )
                     NavigationBarItem(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        icon = { Text("≡") },
+                        selected = selectedTab == AppTab.ACCOUNTS,
+                        onClick = { selectedTab = AppTab.ACCOUNTS },
+                        icon = { Icon(ListIcon, contentDescription = null) },
                         label = { Text("Accounts") }
                     )
-                    NavigationBarItem(selected = selectedTab == 2, onClick = { selectedTab = 2 }, icon = { Text("₦") }, label = { Text("Transactions") })
+                    NavigationBarItem(
+                        selected = selectedTab == AppTab.TRANSACTIONS,
+                        onClick = { selectedTab = AppTab.TRANSACTIONS },
+                        icon = { Icon(Icons.Filled.Sms, contentDescription = null) },
+                        label = { Text("Transactions") }
+                    )
                 }
             }
         ) { padding ->
-            when (selectedTab) {
-                0 -> DashboardScreen(visibleAccounts, totals, Modifier.padding(padding))
-                1 -> AccountsScreen(accounts, { id, value -> scope.launch { repository.setIncluded(id, value) } }, { id, value -> scope.launch { repository.setHidden(id, value) } }, Modifier.padding(padding))
-                else -> TransactionHistoryScreen(dao, accounts, Modifier.padding(padding))
+            AnimatedContent(
+                targetState = selectedTab,
+                modifier = Modifier.padding(padding),
+                transitionSpec = {
+                    (fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 16 })
+                        .togetherWith(fadeOut(tween(150)) + slideOutVertically(tween(150)) { -it / 16 })
+                },
+                label = "tab-content"
+            ) { tab ->
+                when (tab) {
+                    AppTab.DASHBOARD -> DashboardScreen(visibleAccounts, totals)
+                    AppTab.ACCOUNTS -> AccountsScreen(accounts, { id, value -> scope.launch { repository.setIncluded(id, value) } }, { id, value -> scope.launch { repository.setHidden(id, value) } })
+                    AppTab.TRANSACTIONS -> TransactionHistoryScreen(dao, accounts)
+                }
             }
         }
 
@@ -159,79 +214,105 @@ private fun DashboardScreen(
     totals: Map<String, BigDecimal>,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    LazyColumn(
+        modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Text("Included balances", style = MaterialTheme.typography.titleMedium)
-        if (totals.isEmpty()) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("No balances recorded yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Add an account and enter its latest reported balance. Use Enable notifications to connect supported Android app alerts.")
+        item { LargeTitleHeader("Balances", "Across every included account") }
+        item {
+            if (totals.isEmpty()) {
+                GroupedCard(Modifier.appleCardShadow()) {
+                    GroupedRow(showDivider = false, verticalPadding = 20.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("No balances recorded yet", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Add an account and enter its latest reported balance, or enable notifications to connect supported banking apps.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
-            }
-        } else {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    totals.toSortedMap().forEach { (currency, total) ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Total $currency", style = MaterialTheme.typography.titleSmall)
-                            Text(formatMoney(total), style = MaterialTheme.typography.titleLarge)
+            } else {
+                GroupedCard(Modifier.appleCardShadow()) {
+                    val sorted = totals.toSortedMap().toList()
+                    sorted.forEachIndexed { index, (currency, total) ->
+                        GroupedRow(showDivider = index != sorted.lastIndex, verticalPadding = 16.dp) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column {
+                                    Text("Total balance", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(currency, style = MaterialTheme.typography.titleSmall)
+                                }
+                                Text(formatMoney(total), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                 }
             }
         }
-        Text("Accounts", style = MaterialTheme.typography.titleMedium)
+        item { Text("Accounts", style = MaterialTheme.typography.titleLarge) }
         if (accounts.isEmpty()) {
-            Text("No visible accounts. Add an account or unhide one in Account management.")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(accounts, key = { it.accountId }) { account -> AccountBalanceCard(account) }
+            item {
+                Text(
+                    "No visible accounts. Add an account or unhide one in Account management.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
+        } else {
+            items(accounts, key = { it.accountId }) { account -> AccountBalanceCard(account) }
         }
-        Text(
-            "Balances are reported observations, not live bank balances. Totals are separated by currency.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        item {
+            Text(
+                "Balances are reported observations, not live bank balances. Totals are separated by currency.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 @Composable
 private fun AccountBalanceCard(account: BankAccountEntity) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(42.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(account.institutionName.filter(Char::isLetter).take(2).uppercase(), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+    GroupedCard(Modifier.appleCardShadow()) {
+        GroupedRow(showDivider = false, verticalPadding = 14.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        InitialsAvatar(account.institutionName.filter(Char::isLetter).take(2).uppercase())
+                        Column {
+                            Text(account.institutionName, style = MaterialTheme.typography.titleMedium)
+                            Text("••${account.accountIdentifier.takeLast(4)} · ${account.currencyCode}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    Column {
-                        Text(account.institutionName, style = MaterialTheme.typography.titleMedium)
-                        Text("••${account.accountIdentifier.takeLast(4)} · ${account.currencyCode}", style = MaterialTheme.typography.bodySmall)
-                    }
+                    Text(
+                        account.latestBalanceAmount?.let { "${account.currencyCode} ${formatMoney(BigDecimal(it))}" } ?: "Balance unavailable",
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
-                Text(
-                    account.latestBalanceAmount?.let { "${account.currencyCode} ${formatMoney(BigDecimal(it))}" } ?: "Balance unavailable",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            Text(
-                if (account.isIncluded) "Included in totals" else "Excluded from totals",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (account.isIncluded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-            )
-            account.lastReceivedAt?.let {
-                Text(
-                    "Last recorded: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it))}",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatusPill(
+                        text = if (account.isIncluded) "Included in totals" else "Excluded from totals",
+                        tint = if (account.isIncluded) AppleSemantics.Positive else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                account.lastReceivedAt?.let {
+                    Text(
+                        "Last recorded ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun StatusPill(text: String, tint: androidx.compose.ui.graphics.Color) {
+    Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp), color = tint.copy(alpha = 0.14f)) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = tint, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
     }
 }
 
@@ -243,40 +324,40 @@ private fun AccountsScreen(
     modifier: Modifier = Modifier
 ) {
     if (accounts.isEmpty()) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No accounts added yet.") }
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No accounts added yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         return
     }
     LazyColumn(
-        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item { Text("Manage each account independently", style = MaterialTheme.typography.titleMedium) }
+        item { LargeTitleHeader("Accounts", "Manage visibility and totals") }
         items(accounts, key = { it.accountId }) { account ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(account.institutionName, style = MaterialTheme.typography.titleMedium)
-                    Text("••${account.accountIdentifier.takeLast(4)} · ${account.currencyCode}", style = MaterialTheme.typography.bodySmall)
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+            GroupedCard(Modifier.appleCardShadow()) {
+                GroupedRow(showDivider = true, verticalPadding = 14.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        InitialsAvatar(account.institutionName.filter(Char::isLetter).take(2).uppercase())
+                        Column {
+                            Text(account.institutionName, style = MaterialTheme.typography.titleMedium)
+                            Text("••${account.accountIdentifier.takeLast(4)} · ${account.currencyCode}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                GroupedRow(showDivider = true, verticalPadding = 12.dp) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Include in totals")
-                            Text("Exclude without deleting account history.", style = MaterialTheme.typography.bodySmall)
+                            Text("Include in totals", style = MaterialTheme.typography.bodyLarge)
+                            Text("Exclude without deleting account history.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(checked = account.isIncluded, onCheckedChange = { onIncludeChange(account.accountId, it) })
                     }
-                    HorizontalDivider()
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                }
+                GroupedRow(showDivider = false, verticalPadding = 12.dp) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Show on dashboard")
-                            Text("Hiding does not stop notification collection.", style = MaterialTheme.typography.bodySmall)
+                            Text("Show on dashboard", style = MaterialTheme.typography.bodyLarge)
+                            Text("Hiding does not stop notification collection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(checked = !account.isHidden, onCheckedChange = { onHiddenChange(account.accountId, !it) })
                     }
@@ -300,34 +381,39 @@ private fun AddAccountDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add bank account") },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        title = { Text("Add bank account", style = MaterialTheme.typography.titleLarge) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(bank, { bank = it; error = null }, label = { Text("Bank / institution") }, singleLine = true)
-                OutlinedTextField(identifier, { identifier = it }, label = { Text("Account number or identifier") }, singleLine = true)
-                OutlinedTextField(currency, { currency = it.uppercase() }, label = { Text("Currency (e.g. NGN, USD)") }, singleLine = true)
-                OutlinedTextField(type, { type = it }, label = { Text("Account type (optional)") }, singleLine = true)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(bank, { bank = it; error = null }, label = { Text("Bank / institution") }, singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                OutlinedTextField(identifier, { identifier = it }, label = { Text("Account number or identifier") }, singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                OutlinedTextField(currency, { currency = it.uppercase() }, label = { Text("Currency (e.g. NGN, USD)") }, singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                OutlinedTextField(type, { type = it }, label = { Text("Account type (optional)") }, singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
                 OutlinedTextField(
                     balance, { balance = it; error = null },
                     label = { Text("Latest balance (optional)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true
+                    singleLine = true,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val validAmount = balance.isBlank() || runCatching {
-                    BigDecimal(balance.replace(",", ""))
-                }.isSuccess
-                when {
-                    bank.isBlank() || identifier.isBlank() || currency.trim().length != 3 ->
-                        error = "Enter a bank, account identifier and 3-letter currency code."
-                    !validAmount -> error = "Enter a valid balance amount."
-                    else -> onSave(bank, identifier, currency, type, balance.replace(",", "").takeIf { it.isNotBlank() })
+            Button(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                onClick = {
+                    val validAmount = balance.isBlank() || runCatching {
+                        BigDecimal(balance.replace(",", ""))
+                    }.isSuccess
+                    when {
+                        bank.isBlank() || identifier.isBlank() || currency.trim().length != 3 ->
+                            error = "Enter a bank, account identifier and 3-letter currency code."
+                        !validAmount -> error = "Enter a valid balance amount."
+                        else -> onSave(bank, identifier, currency, type, balance.replace(",", "").takeIf { it.isNotBlank() })
+                    }
                 }
-            }) { Text("Save account") }
+            ) { Text("Save account") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
