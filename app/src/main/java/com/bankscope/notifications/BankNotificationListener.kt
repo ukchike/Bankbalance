@@ -5,13 +5,9 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.bankscope.data.BankBalanceDatabase
-import com.bankscope.data.BalanceObservationEntity
 import com.bankscope.data.TransactionReviewRepository
 import com.bankscope.parser.BankParseResult
 import com.bankscope.parser.NigerianBankMessageParser
-import java.math.BigDecimal
-import java.security.MessageDigest
-import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,15 +56,12 @@ class BankNotificationListener : NotificationListenerService() {
                 when (val result = parser.parse(sourceName, body, receivedAt)) {
                     is BankParseResult.Success -> {
                         val parsed = result.message
+                        val sourceType = if (packageName == "com.android.mms" || packageName == "com.google.android.apps.messaging") "SMS_NOTIFICATION" else "APP_NOTIFICATION"
                         val dao = BankBalanceDatabase.getInstance(applicationContext).bankAccountDao()
-                        val transaction = TransactionReviewRepository(dao).record(
-                            parsed = parsed,
-                            sourceType = if (packageName == "com.android.mms" || packageName == "com.google.android.apps.messaging") "SMS_NOTIFICATION" else "APP_NOTIFICATION",
-                            receivedAt = receivedAt,
-                            sourceFingerprint = sha256("$packageName|$body|$receivedAt")
-                        )
+                        val repository = TransactionReviewRepository(dao)
+                        val transaction = repository.record(parsed, sourceType, receivedAt)
                         diagnostics.recordParsed(parsed.institution, transaction != null)
-                        persistBalanceIfSafe(parsed, receivedAt, packageName, body)
+                        repository.recordBalanceObservation(parsed, sourceType, receivedAt)
                     }
                     is BankParseResult.Rejected -> {
                         diagnostics.recordIgnored(result.reason)
@@ -81,61 +74,6 @@ class BankNotificationListener : NotificationListenerService() {
             }
         }
     }
-
-    private suspend fun persistBalanceIfSafe(
-        parsed: com.bankscope.parser.ParsedBankMessage,
-        receivedAt: Long,
-        packageName: String,
-        body: String
-    ) {
-        val balance = parsed.reportedBalance ?: return
-        val dao = BankBalanceDatabase.getInstance(applicationContext).bankAccountDao()
-        val accounts = dao.getAccountsForInstitution(parsed.institution, parsed.currencyCode)
-        val matched = accounts.firstOrNull { account ->
-            accountHintMatches(parsed.accountHint, account.accountIdentifier)
-        } ?: if (accounts.size == 1 && parsed.accountHint == null) accounts.first() else null
-
-        if (matched == null) {
-            Log.w(TAG, "Transaction retained for review; no unambiguous balance account match for ${parsed.institution}")
-            return
-        }
-
-        val observation = BalanceObservationEntity(
-            observationId = UUID.randomUUID().toString(),
-            accountId = matched.accountId,
-            amount = BigDecimal(balance).toPlainString(),
-            currencyCode = parsed.currencyCode,
-            balanceType = parsed.balanceType,
-            eventAt = parsed.eventAtEpochMillis,
-            receivedAt = receivedAt,
-            sourceType = "APP_NOTIFICATION",
-            parserVersion = parsed.parserVersion,
-            confidence = parsed.confidence,
-            deduplicationFingerprint = sha256("$packageName|$body|$receivedAt")
-        )
-        val inserted = dao.insertObservation(observation)
-        if (inserted != -1L) {
-            dao.updateLatestBalanceIfNewer(
-                accountId = matched.accountId,
-                amount = observation.amount,
-                balanceType = observation.balanceType,
-                eventAt = observation.eventAt,
-                receivedAt = receivedAt
-            )
-        }
-    }
-
-    private fun accountHintMatches(hint: String?, accountIdentifier: String): Boolean {
-        if (hint.isNullOrBlank()) return false
-        val digitsHint = hint.filter(Char::isDigit)
-        val digitsAccount = accountIdentifier.filter(Char::isDigit)
-        return digitsHint.length >= 4 && digitsAccount.length >= 4 &&
-            digitsAccount.endsWith(digitsHint.takeLast(4))
-    }
-
-    private fun sha256(value: String): String =
-        MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
-            .joinToString("") { "%02x".format(it) }
 
     override fun onDestroy() {
         serviceScope.cancel()

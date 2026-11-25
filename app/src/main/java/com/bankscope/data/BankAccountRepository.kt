@@ -53,4 +53,7 @@ class BankAccountRepository(private val dao: BankAccountDao) {
 
     suspend fun setIncluded(id: String, included: Boolean) = dao.setIncluded(id, included)
     suspend fun setHidden(id: String, hidden: Boolean) = dao.setHidden(id, hidden)
+
+    /** Permanently deletes an account and its balance/transaction history. Not reversible. */
+    suspend fun deleteAccount(id: String) = dao.deleteAccountAndHistory(id)
 }

@@ -6,7 +6,6 @@ import com.bankscope.data.BankAccountDao
 import com.bankscope.data.TransactionReviewRepository
 import com.bankscope.parser.BankParseResult
 import com.bankscope.parser.NigerianBankMessageParser
-import java.security.MessageDigest
 
 data class SmsImportResult(val scanned: Int, val imported: Int, val ignored: Int)
 
@@ -41,14 +40,15 @@ class SmsInboxImporter(private val context: Context, private val dao: BankAccoun
                 }
                 when (val result = parser.parse(institution, body, receivedAt)) {
                     is BankParseResult.Success -> {
-                        val fingerprint = MessageDigest.getInstance("SHA-256")
-                            .digest("SMS|$address|$receivedAt|$body".toByteArray())
-                            .joinToString("") { "%02x".format(it) }
                         val row = repository.record(
                             parsed = result.message,
                             sourceType = "SMS_INBOX_IMPORT",
-                            receivedAt = receivedAt,
-                            sourceFingerprint = fingerprint
+                            receivedAt = receivedAt
+                        )
+                        repository.recordBalanceObservation(
+                            parsed = result.message,
+                            sourceType = "SMS_INBOX_IMPORT",
+                            receivedAt = receivedAt
                         )
                         if (row != null) imported++ else ignored++
                     }

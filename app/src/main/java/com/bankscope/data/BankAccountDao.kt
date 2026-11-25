@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -70,4 +71,37 @@ interface BankAccountDao {
         eventAt: Long?,
         receivedAt: Long
     )
+
+    @Query("DELETE FROM bank_accounts WHERE accountId = :accountId")
+    suspend fun deleteAccountRow(accountId: String)
+
+    @Query("DELETE FROM balance_observations WHERE accountId = :accountId")
+    suspend fun deleteObservationsForAccount(accountId: String)
+
+    @Query("DELETE FROM bank_transactions WHERE accountId = :accountId")
+    suspend fun deleteTransactionsForAccount(accountId: String)
+
+    /**
+     * Deletes an account along with the balance observations and transactions tied to it.
+     * Transactions still pending account assignment (accountId IS NULL) are left untouched
+     * since they aren't this account's history.
+     */
+    @Transaction
+    suspend fun deleteAccountAndHistory(accountId: String) {
+        deleteObservationsForAccount(accountId)
+        deleteTransactionsForAccount(accountId)
+        deleteAccountRow(accountId)
+    }
+
+    @Query("SELECT * FROM bank_accounts ORDER BY institutionName COLLATE NOCASE, accountIdentifier")
+    suspend fun getAllAccountsOnce(): List<BankAccountEntity>
+
+    @Query("SELECT * FROM balance_observations ORDER BY receivedAt")
+    suspend fun getAllObservationsOnce(): List<BalanceObservationEntity>
+
+    @Query("SELECT * FROM bank_transactions ORDER BY receivedAt")
+    suspend fun getAllTransactionsOnce(): List<TransactionEntity>
+
+    @Query("SELECT * FROM category_budgets ORDER BY monthKey, category")
+    suspend fun getAllBudgetsOnce(): List<BudgetEntity>
 }

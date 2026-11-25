@@ -38,6 +38,7 @@ import com.bankscope.notifications.NotificationDiagnostics
 import com.bankscope.data.BankAccountEntity
 import com.bankscope.data.BankAccountRepository
 import com.bankscope.data.BankBalanceDatabase
+import com.bankscope.data.DataExporter
 import com.bankscope.ui.components.GroupedCard
 import com.bankscope.ui.components.GroupedRow
 import com.bankscope.ui.components.InitialsAvatar
@@ -71,8 +72,25 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
     var showDiagnostics by remember { mutableStateOf(false) }
     var diagnosticSnapshot by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showOverflowMenu by remember { mutableStateOf(false) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val exportDataLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val json = DataExporter.toJson(
+                    accounts = dao.getAllAccountsOnce(),
+                    observations = dao.getAllObservationsOnce(),
+                    transactions = dao.getAllTransactionsOnce(),
+                    budgets = dao.getAllBudgetsOnce()
+                )
+                val result = runCatching {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(json) }
+                }
+                exportMessage = if (result.isSuccess) "Data exported." else "Export failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+            }
+        }
+    }
     val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             importingSms = true
@@ -136,6 +154,10 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                                     enabled = !importingSms,
                                     onClick = { smsPermissionLauncher.launch(Manifest.permission.READ_SMS); showOverflowMenu = false }
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("Export all data") },
+                                    onClick = { exportDataLauncher.launch("bankbalance-export.json"); showOverflowMenu = false }
+                                )
                             }
                             DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
                                 listOf("SYSTEM", "LIGHT", "DARK").forEach { choice ->
@@ -184,7 +206,12 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
             ) { tab ->
                 when (tab) {
                     AppTab.DASHBOARD -> DashboardScreen(visibleAccounts, totals)
-                    AppTab.ACCOUNTS -> AccountsScreen(accounts, { id, value -> scope.launch { repository.setIncluded(id, value) } }, { id, value -> scope.launch { repository.setHidden(id, value) } })
+                    AppTab.ACCOUNTS -> AccountsScreen(
+                        accounts,
+                        onIncludeChange = { id, value -> scope.launch { repository.setIncluded(id, value) } },
+                        onHiddenChange = { id, value -> scope.launch { repository.setHidden(id, value) } },
+                        onDeleteAccount = { id -> scope.launch { repository.deleteAccount(id) } }
+                    )
                     AppTab.TRANSACTIONS -> TransactionHistoryScreen(dao, accounts)
                 }
             }
@@ -193,6 +220,8 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
         if (showDiagnostics) AlertDialog(onDismissRequest = { showDiagnostics = false }, title = { Text("Capture diagnostics") }, text = { Column { Text("Notification access: " + if (NotificationAccess.isGranted(context)) "Granted" else "Not granted"); diagnosticSnapshot.forEach { (key, value) -> Text(key.replace("_", " ").replaceFirstChar { it.uppercase() } + ": " + value) } } }, confirmButton = { TextButton(onClick = { diagnosticSnapshot = NotificationDiagnostics(context).snapshot() }) { Text("Refresh") } }, dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("Close") } })
 
         smsImportMessage?.let { message -> AlertDialog(onDismissRequest = { smsImportMessage = null }, title = { Text("SMS import result") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { smsImportMessage = null }) { Text("Close") } }) }
+
+        exportMessage?.let { message -> AlertDialog(onDismissRequest = { exportMessage = null }, title = { Text("Export data") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { exportMessage = null }) { Text("Close") } }) }
 
         if (showAddDialog) {
             AddAccountDialog(
@@ -321,8 +350,10 @@ private fun AccountsScreen(
     accounts: List<BankAccountEntity>,
     onIncludeChange: (String, Boolean) -> Unit,
     onHiddenChange: (String, Boolean) -> Unit,
+    onDeleteAccount: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var pendingDelete by remember { mutableStateOf<BankAccountEntity?>(null) }
     if (accounts.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No accounts added yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         return
@@ -353,7 +384,7 @@ private fun AccountsScreen(
                         Switch(checked = account.isIncluded, onCheckedChange = { onIncludeChange(account.accountId, it) })
                     }
                 }
-                GroupedRow(showDivider = false, verticalPadding = 12.dp) {
+                GroupedRow(showDivider = true, verticalPadding = 12.dp) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Show on dashboard", style = MaterialTheme.typography.bodyLarge)
@@ -362,8 +393,32 @@ private fun AccountsScreen(
                         Switch(checked = !account.isHidden, onCheckedChange = { onHiddenChange(account.accountId, !it) })
                     }
                 }
+                GroupedRow(showDivider = false, verticalPadding = 12.dp) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Delete account", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                            Text("Permanently removes this account and its history.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { pendingDelete = account }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    }
+                }
             }
         }
+    }
+
+    pendingDelete?.let { account ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            title = { Text("Delete ${account.institutionName} ••${account.accountIdentifier.takeLast(4)}?") },
+            text = { Text("This permanently deletes the account and all of its balance and transaction history. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { onDeleteAccount(account.accountId); pendingDelete = null }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
+        )
     }
 }
 

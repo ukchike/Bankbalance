@@ -6,6 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import net.sqlcipher.database.SQLiteDatabase as SqlCipherDatabase
+import net.sqlcipher.database.SupportFactory
 
 @Database(
     entities = [BankAccountEntity::class, BalanceObservationEntity::class, TransactionEntity::class, BudgetEntity::class],
@@ -61,13 +63,29 @@ abstract class BankBalanceDatabase : RoomDatabase() {
         }
 
         @Volatile private var INSTANCE: BankBalanceDatabase? = null
+
+        /**
+         * The database is encrypted at rest with SQLCipher. The passphrase is random bytes held
+         * only in Keystore-backed [EncryptedSharedPreferences] (see [SecureKeyProvider]) — it is
+         * never hardcoded and never leaves the device. A plaintext database from a build that
+         * predates this change will not open against the encrypted factory; there is no
+         * automatic migration path for that one-time transition, since SQLCipher cannot read an
+         * unencrypted file as encrypted. A fresh install, or clearing app data once, is required
+         * when upgrading from such a build.
+         */
         fun getInstance(context: Context): BankBalanceDatabase =
             INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    BankBalanceDatabase::class.java,
-                    "bankbalance.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
+                INSTANCE ?: run {
+                    val appContext = context.applicationContext
+                    SqlCipherDatabase.loadLibs(appContext)
+                    val passphrase = SecureKeyProvider(appContext).getOrCreateDatabasePassphrase()
+                    val factory = SupportFactory(SqlCipherDatabase.getBytes(passphrase))
+                    Room.databaseBuilder(appContext, BankBalanceDatabase::class.java, "bankbalance.db")
+                        .openHelperFactory(factory)
+                        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                        .build()
+                        .also { INSTANCE = it }
+                }
             }
     }
 }
