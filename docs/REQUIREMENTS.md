@@ -39,11 +39,13 @@ Each observation stores account_id, amount as exact decimal text, currency ISO c
 - Do not infer balance by adding/subtracting transaction amounts when a bank-reported balance is available.
 
 ## 6. Security and privacy
-- Encrypt sensitive local data and cloud transport/storage.
-- Store OAuth tokens using Android Keystore-backed secure storage.
-- Do not upload raw message bodies by default; process locally and sync only minimum structured observations.
-- Provide source disconnect, data export and account/data deletion.
-- Never request or store bank passwords, PINs or OTPs.
+- Encrypt sensitive local data and cloud transport/storage. **Implemented for local data**: the Room database is encrypted at rest with SQLCipher, keyed by a random passphrase held only in Keystore-backed `EncryptedSharedPreferences`. Cloud transport/storage is not applicable yet — no cloud sync exists.
+- Store OAuth tokens using Android Keystore-backed secure storage. Not yet applicable: no integration (Gmail) that acquires OAuth tokens is live.
+- Do not upload raw message bodies by default; process locally and sync only minimum structured observations. Satisfied trivially: there is no upload path of any kind yet.
+- Provide source disconnect, data export and account/data deletion. **Implemented**: "Export all data" (JSON) and a confirmed "Delete account" action (removes the account and its balance/transaction history) are both available from the app.
+- Never request or store bank passwords, PINs or OTPs. Satisfied: no such field or flow exists anywhere in the app.
 
 ## 7. Current milestone
-Implemented: Room entities for accounts and observations, account repository, local database, add-account UI, dashboard, currency-grouped totals, include/exclude and show/hide controls. Notification ingestion and automated balance updates are not yet implemented.
+Implemented: Room entities for accounts, observations, transactions and budgets; account repository; local encrypted database; add-account UI; dashboard; currency-grouped totals; include/exclude and show/hide controls; live Android-notification and SMS-import ingestion through a shared, content-based deduplication path; category suggestion and monthly budgets; full data export and account deletion.
+
+Not implemented: Gmail ingestion (parsing-only adapter exists with no OAuth, no API call and no caller — entirely disconnected from the app), cloud sync of any kind, and physical-device validation of the notification-source package/template catalogue.

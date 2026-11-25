@@ -37,10 +37,17 @@ BankBalance extracts the latest reported balances from user-authorised bank noti
 - Added current-month budget-versus-actual progress and category spending summaries, excluding unmatched transactions and flagged internal transfers.
 - CSV exports include category and internal-transfer fields.
 
+## Phase 9: Closing gaps between stated requirements and implementation
+- Deduplication fingerprints for both transactions and balance observations are now derived purely from message content (institution, account, currency, direction/amount or balance, event time), shared by every ingestion path. Previously SMS import, live notifications and the (still-disconnected) Gmail adapter each built their own source-specific fingerprint, so the same real-world event reported through two channels could be double-counted; this is now unified in `TransactionReviewRepository`.
+- SMS import now records balance observations (and refreshes an account's dashboard balance) the same way the live notification listener does, not just transactions.
+- The local database is encrypted at rest with SQLCipher. The encryption passphrase is random and is held only in Keystore-backed `EncryptedSharedPreferences` (`SecureKeyProvider`) — it is never hardcoded. Upgrading from a build that predates this change requires a fresh install or clearing app data, since SQLCipher cannot open a pre-existing plaintext database file.
+- Added "Export all data" (accounts, balance history, transactions and budgets as JSON) and a confirmed, destructive "Delete account" action, closing out the data-export/deletion requirement that previously had no implementation at all.
+- Added JVM unit tests for the previously-untested matching/dedup/ordering logic in `TransactionReviewRepository` (ambiguous-match-goes-to-review, cross-source dedup, late-arriving-older-observation-does-not-overwrite-newer).
+
 ## Important distinction
 Balances are the latest validated reported observations, not live bank API balances. Each observation retains its source, balance type, event timestamp and receipt timestamp.
 
 ## Development status
-Phase 8 category and budgeting UI is committed. Android notification collection and the new category/budget workflows require physical-device validation; live Gmail authorisation/retrieval and successful CI verification remain outstanding.
+Phase 8 category and budgeting UI is committed, and Phase 9 closes the dedup/encryption/data-governance gaps called out in requirements review. Android notification collection still needs physical-device validation of the real package/notification-template catalogue (the Phase 4 allow-list remains a small, unverified set). Gmail integration remains entirely unimplemented beyond a parsing-only adapter with no caller: there is no OAuth flow, no Gmail API dependency, and no live retrieval path — it is not wired into the app at all.
 
 See [requirements](docs/REQUIREMENTS.md), [architecture](docs/ARCHITECTURE.md), [parser design](docs/BANK_PARSERS.md) and [Phase 3 notes](docs/PHASE_3.md).
