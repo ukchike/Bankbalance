@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Database(
     entities = [BankAccountEntity::class, BalanceObservationEntity::class, TransactionEntity::class, BudgetEntity::class],
@@ -72,10 +73,18 @@ abstract class BankBalanceDatabase : RoomDatabase() {
          * unencrypted file as encrypted. A fresh install, or clearing app data once, is required
          * when upgrading from such a build.
          */
+        // Unlike the older net.sqlcipher.database API, this library has no loadLibs() helper and
+        // never calls System.loadLibrary itself anywhere in its Java code — the embedding app is
+        // responsible for loading its native library before the first database is opened.
+        private val nativeLibraryLoaded = AtomicBoolean(false)
+
         fun getInstance(context: Context): BankBalanceDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
                     val appContext = context.applicationContext
+                    if (nativeLibraryLoaded.compareAndSet(false, true)) {
+                        System.loadLibrary("sqlcipher")
+                    }
                     val passphrase = SecureKeyProvider(appContext).getOrCreateDatabasePassphrase()
                     val factory = SupportOpenHelperFactory(passphrase)
                     Room.databaseBuilder(appContext, BankBalanceDatabase::class.java, "bankbalance.db")
