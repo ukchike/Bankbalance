@@ -6,8 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import net.sqlcipher.database.SQLiteDatabase as SqlCipherDatabase
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [BankAccountEntity::class, BalanceObservationEntity::class, TransactionEntity::class, BudgetEntity::class],
@@ -77,9 +76,8 @@ abstract class BankBalanceDatabase : RoomDatabase() {
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: run {
                     val appContext = context.applicationContext
-                    SqlCipherDatabase.loadLibs(appContext)
                     val passphrase = SecureKeyProvider(appContext).getOrCreateDatabasePassphrase()
-                    val factory = SupportFactory(SqlCipherDatabase.getBytes(passphrase))
+                    val factory = SupportOpenHelperFactory(passphrase)
                     Room.databaseBuilder(appContext, BankBalanceDatabase::class.java, "bankbalance.db")
                         .openHelperFactory(factory)
                         .addMigrations(MIGRATION_1_2, MIGRATION_2_3)

@@ -34,14 +34,14 @@ class SecureKeyProvider(context: Context) {
     }
 
     /** Returns the database passphrase, generating and persisting a new random one on first run. */
-    fun getOrCreateDatabasePassphrase(): CharArray {
+    fun getOrCreateDatabasePassphrase(): ByteArray {
         val existing = prefs.getString(KEY_DB_PASSPHRASE, null)
-        if (existing != null) return existing.toCharArray()
+        if (existing != null) return existing.toByteArray(Charsets.UTF_8)
 
         val randomBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val generated = Base64.encodeToString(randomBytes, Base64.NO_WRAP)
         prefs.edit().putString(KEY_DB_PASSPHRASE, generated).apply()
-        return generated.toCharArray()
+        return generated.toByteArray(Charsets.UTF_8)
     }
 
     private companion object {
