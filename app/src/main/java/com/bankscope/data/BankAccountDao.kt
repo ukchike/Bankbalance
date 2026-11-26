@@ -72,6 +72,22 @@ interface BankAccountDao {
         receivedAt: Long
     )
 
+    /**
+     * Unconditionally applies a manually-entered balance correction, bypassing the
+     * "only if newer" guard in [updateLatestBalanceIfNewer]: the user is explicitly asserting
+     * this is the correct current balance, so it always takes effect immediately regardless of
+     * the event time on whatever observation is currently stored.
+     */
+    @Query("""
+        UPDATE bank_accounts
+        SET latestBalanceAmount = :amount,
+            latestBalanceType = 'MANUAL',
+            latestBalanceEventAt = :eventAt,
+            lastReceivedAt = :eventAt
+        WHERE accountId = :accountId
+    """)
+    suspend fun setManualBalance(accountId: String, amount: String, eventAt: Long)
+
     @Query("DELETE FROM bank_accounts WHERE accountId = :accountId")
     suspend fun deleteAccountRow(accountId: String)
 

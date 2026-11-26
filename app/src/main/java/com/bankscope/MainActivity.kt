@@ -73,6 +73,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
     var diagnosticSnapshot by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var showOverflowMenu by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
+    var adjustingAccount by remember { mutableStateOf<BankAccountEntity?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val exportDataLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -205,7 +206,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                 label = "tab-content"
             ) { tab ->
                 when (tab) {
-                    AppTab.DASHBOARD -> DashboardScreen(visibleAccounts, totals)
+                    AppTab.DASHBOARD -> DashboardScreen(visibleAccounts, totals, onAdjustBalance = { adjustingAccount = it })
                     AppTab.ACCOUNTS -> AccountsScreen(
                         accounts,
                         onIncludeChange = { id, value -> scope.launch { repository.setIncluded(id, value) } },
@@ -234,6 +235,19 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
                 }
             )
         }
+
+        adjustingAccount?.let { account ->
+            AdjustBalanceDialog(
+                account = account,
+                onDismiss = { adjustingAccount = null },
+                onSave = { newAmount ->
+                    scope.launch {
+                        repository.adjustBalance(account.accountId, account.currencyCode, newAmount)
+                        adjustingAccount = null
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -241,6 +255,7 @@ private fun BankBalanceApp(repository: BankAccountRepository, dao: com.bankscope
 private fun DashboardScreen(
     accounts: List<BankAccountEntity>,
     totals: Map<String, BigDecimal>,
+    onAdjustBalance: (BankAccountEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -290,7 +305,7 @@ private fun DashboardScreen(
                 )
             }
         } else {
-            items(accounts, key = { it.accountId }) { account -> AccountBalanceCard(account) }
+            items(accounts, key = { it.accountId }) { account -> AccountBalanceCard(account, onAdjustBalance = { onAdjustBalance(account) }) }
         }
         item {
             Text(
@@ -303,7 +318,7 @@ private fun DashboardScreen(
 }
 
 @Composable
-private fun AccountBalanceCard(account: BankAccountEntity) {
+private fun AccountBalanceCard(account: BankAccountEntity, onAdjustBalance: () -> Unit) {
     GroupedCard(Modifier.appleCardShadow()) {
         GroupedRow(showDivider = false, verticalPadding = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -320,11 +335,14 @@ private fun AccountBalanceCard(account: BankAccountEntity) {
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     StatusPill(
                         text = if (account.isIncluded) "Included in totals" else "Excluded from totals",
                         tint = if (account.isIncluded) AppleSemantics.Positive else MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (account.latestBalanceType == "MANUAL") {
+                        StatusPill(text = "Manually set", tint = AppleSemantics.Warning)
+                    }
                 }
                 account.lastReceivedAt?.let {
                     Text(
@@ -332,6 +350,9 @@ private fun AccountBalanceCard(account: BankAccountEntity) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                TextButton(onClick = onAdjustBalance, contentPadding = PaddingValues(0.dp)) {
+                    Text("Adjust balance")
                 }
             }
         }
@@ -469,6 +490,54 @@ private fun AddAccountDialog(
                     }
                 }
             ) { Text("Save account") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun AdjustBalanceDialog(
+    account: BankAccountEntity,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var amount by remember { mutableStateOf(account.latestBalanceAmount.orEmpty()) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        title = { Text("Adjust balance", style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "${account.institutionName} ••${account.accountIdentifier.takeLast(4)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    amount, { amount = it; error = null },
+                    label = { Text("Correct balance (${account.currencyCode})") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                )
+                Text(
+                    "This replaces the current balance immediately and is recorded as a manual correction.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                onClick = {
+                    val valid = runCatching { BigDecimal(amount.trim().replace(",", "")) }.isSuccess
+                    if (!valid) error = "Enter a valid balance amount." else onSave(amount)
+                }
+            ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

@@ -54,6 +54,32 @@ class BankAccountRepository(private val dao: BankAccountDao) {
     suspend fun setIncluded(id: String, included: Boolean) = dao.setIncluded(id, included)
     suspend fun setHidden(id: String, hidden: Boolean) = dao.setHidden(id, hidden)
 
+    /**
+     * Manually corrects an account's balance, e.g. when the user notices the last
+     * SMS/notification-reported figure is wrong. Always takes effect immediately, and is
+     * recorded as a MANUAL balance observation alongside the automatically-collected history.
+     */
+    suspend fun adjustBalance(accountId: String, currencyCode: String, newAmount: String) {
+        val now = System.currentTimeMillis()
+        val amount = BigDecimal(newAmount.trim().replace(",", "")).toPlainString()
+        dao.insertObservation(
+            BalanceObservationEntity(
+                observationId = UUID.randomUUID().toString(),
+                accountId = accountId,
+                amount = amount,
+                currencyCode = currencyCode,
+                balanceType = "MANUAL",
+                eventAt = now,
+                receivedAt = now,
+                sourceType = "MANUAL_ADJUSTMENT",
+                parserVersion = null,
+                confidence = 1.0,
+                deduplicationFingerprint = "manual-adjust:$accountId:$now"
+            )
+        )
+        dao.setManualBalance(accountId, amount, now)
+    }
+
     /** Permanently deletes an account and its balance/transaction history. Not reversible. */
     suspend fun deleteAccount(id: String) = dao.deleteAccountAndHistory(id)
 }

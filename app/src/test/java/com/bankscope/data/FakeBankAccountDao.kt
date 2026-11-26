@@ -107,6 +107,19 @@ class FakeBankAccountDao : BankAccountDao {
         }
     }
 
+    override suspend fun setManualBalance(accountId: String, amount: String, eventAt: Long) {
+        val index = accounts.indexOfFirst { it.accountId == accountId }
+        if (index >= 0) {
+            accounts[index] = accounts[index].copy(
+                latestBalanceAmount = amount,
+                latestBalanceType = "MANUAL",
+                latestBalanceEventAt = eventAt,
+                lastReceivedAt = eventAt
+            )
+            accountsFlow.value = accounts.toList()
+        }
+    }
+
     override suspend fun deleteAccountRow(accountId: String) {
         accounts.removeAll { it.accountId == accountId }
         accountsFlow.value = accounts.toList()
